@@ -76,6 +76,13 @@ export interface ApiResponse<T> {
 
 // API functions
 export const api = {
+  // Seeding
+  seedDatabase: async (): Promise<any> => {
+    const res = await apiClient.post<ApiResponse<any>>("/seed");
+    if (res.data.error) throw new Error(res.data.error);
+    return res.data.data;
+  },
+
   // Geofences
   getGeofences: async (): Promise<Geofence[]> => {
     const res = await apiClient.get<ApiResponse<Geofence[]>>("/geofences");

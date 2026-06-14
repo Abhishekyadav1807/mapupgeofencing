@@ -10,6 +10,7 @@ import (
 	ws "geofencing-system/websocket"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type APIResponse struct {
@@ -19,6 +20,7 @@ type APIResponse struct {
 }
 
 type Handler struct {
+	db           *gorm.DB
 	geofenceSvc  *services.GeofenceService
 	vehicleSvc   *services.VehicleService
 	locationSvc  *services.LocationService
@@ -28,6 +30,7 @@ type Handler struct {
 }
 
 func NewHandler(
+	db *gorm.DB,
 	geofenceSvc *services.GeofenceService,
 	vehicleSvc *services.VehicleService,
 	locationSvc *services.LocationService,
@@ -36,6 +39,7 @@ func NewHandler(
 	wsHub *ws.Hub,
 ) *Handler {
 	return &Handler{
+		db:           db,
 		geofenceSvc:  geofenceSvc,
 		vehicleSvc:   vehicleSvc,
 		locationSvc:  locationSvc,
@@ -276,6 +280,96 @@ func (h *Handler) WebSocketAlerts(c *gin.Context) {
 	ws.ServeAlerts(h.wsHub, c.Writer, c.Request)
 }
 
+func (h *Handler) SeedDatabase(c *gin.Context) {
+	// 1. Wipe all tables
+	h.db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.Violation{})
+	h.db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.Location{})
+	h.db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.VehicleGeofenceState{})
+	h.db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.AlertConfig{})
+	h.db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.Vehicle{})
+	h.db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.Geofence{})
+
+	// Reset sqlite autoincrement sequence
+	h.db.Exec("DELETE FROM sqlite_sequence")
+
+	// 2. Insert Geofences
+	gf1 := &models.Geofence{Name: "Cubbon Park Green Zone"}
+	_ = gf1.SetPolygon([]models.Point{
+		{Lat: 12.9785, Lng: 77.5905},
+		{Lat: 12.9790, Lng: 77.5985},
+		{Lat: 12.9720, Lng: 77.5995},
+		{Lat: 12.9705, Lng: 77.5925},
+	})
+
+	gf2 := &models.Geofence{Name: "Indiranagar Commercial Corridor"}
+	_ = gf2.SetPolygon([]models.Point{
+		{Lat: 12.9780, Lng: 77.6380},
+		{Lat: 12.9790, Lng: 77.6480},
+		{Lat: 12.9680, Lng: 77.6490},
+		{Lat: 12.9670, Lng: 77.6390},
+	})
+
+	gf3 := &models.Geofence{Name: "Hebbal IT Highway"}
+	_ = gf3.SetPolygon([]models.Point{
+		{Lat: 13.0450, Lng: 77.5850},
+		{Lat: 13.0460, Lng: 77.5990},
+		{Lat: 13.0330, Lng: 77.6000},
+		{Lat: 13.0320, Lng: 77.5860},
+	})
+
+	if err := h.db.Create(gf1).Error; err != nil {
+		respondError(c, http.StatusInternalServerError, "failed to create geofence 1: "+err.Error())
+		return
+	}
+	if err := h.db.Create(gf2).Error; err != nil {
+		respondError(c, http.StatusInternalServerError, "failed to create geofence 2: "+err.Error())
+		return
+	}
+	if err := h.db.Create(gf3).Error; err != nil {
+		respondError(c, http.StatusInternalServerError, "failed to create geofence 3: "+err.Error())
+		return
+	}
+
+	// 3. Insert Vehicles
+	v1 := &models.Vehicle{Name: "Truck-001"}
+	v2 := &models.Vehicle{Name: "Delivery-Van-42"}
+	v3 := &models.Vehicle{Name: "Cargo-Hauler-X"}
+
+	if err := h.db.Create(v1).Error; err != nil {
+		respondError(c, http.StatusInternalServerError, "failed to create vehicle 1: "+err.Error())
+		return
+	}
+	if err := h.db.Create(v2).Error; err != nil {
+		respondError(c, http.StatusInternalServerError, "failed to create vehicle 2: "+err.Error())
+		return
+	}
+	if err := h.db.Create(v3).Error; err != nil {
+		respondError(c, http.StatusInternalServerError, "failed to create vehicle 3: "+err.Error())
+		return
+	}
+
+	// 4. Configure Alert Rules
+	_, _ = h.alertSvc.Configure(gf1.ID, nil, "both", true)
+	_, _ = h.alertSvc.Configure(gf2.ID, nil, "both", true)
+	_, _ = h.alertSvc.Configure(gf3.ID, nil, "both", true)
+
+	// 5. Seed initial location history
+	_, _, _ = h.locationSvc.RecordLocation(v1.ID, 12.9750, 77.5850)
+	_, _, _ = h.locationSvc.RecordLocation(v1.ID, 12.9750, 77.5880)
+
+	_, _, _ = h.locationSvc.RecordLocation(v2.ID, 12.9850, 77.6430)
+	_, _, _ = h.locationSvc.RecordLocation(v2.ID, 12.9810, 77.6430)
+
+	_, _, _ = h.locationSvc.RecordLocation(v3.ID, 13.0380, 77.5920)
+	_, _, _ = h.locationSvc.RecordLocation(v3.ID, 13.0380, 77.5890)
+
+	respond(c, http.StatusOK, gin.H{
+		"message":   "Database seeded successfully with 3 geofences, 3 vehicles, default alert rules, and starting path history.",
+		"geofences": []uint{gf1.ID, gf2.ID, gf3.ID},
+		"vehicles":  []uint{v1.ID, v2.ID, v3.ID},
+	})
+}
+
 func CORSMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
@@ -295,6 +389,8 @@ func CORSMiddleware() gin.HandlerFunc {
 func (h *Handler) RegisterRoutes(r *gin.Engine) {
 	r.Use(CORSMiddleware())
 	r.Use(RequestTimingMiddleware())
+
+	r.POST("/seed", h.SeedDatabase)
 
 	r.POST("/geofences", h.CreateGeofence)
 	r.GET("/geofences", h.ListGeofences)

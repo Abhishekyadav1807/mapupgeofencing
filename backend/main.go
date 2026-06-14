@@ -33,6 +33,7 @@ func main() {
 	)
 
 	handler := handlers.NewHandler(
+		db,
 		geofenceSvc,
 		vehicleSvc,
 		locationSvc,
