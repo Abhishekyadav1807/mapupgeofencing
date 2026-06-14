@@ -1,0 +1,44 @@
+# Dependencies
+**/node_modules/
+**/.pnp
+.pnp.*
+
+# Next.js build output
+**/.next/
+**/out/
+
+# Production builds and caches
+**/build/
+**/dist/
+*.tsbuildinfo
+next-env.d.ts
+
+# OS & Editor configurations
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Backend compiled binaries
+backend/geofencing-server
+backend/geofencing-server.exe
+geofencing-server
+geofencing-server.exe
+*.exe
+
+# Local SQLite databases and journals
+backend/*.db
+backend/*.db-journal
+*.db
+*.db-journal
+
+# Environment secrets
+.env*
+!.env.example
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+*.log

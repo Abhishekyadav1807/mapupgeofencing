@@ -1,0 +1,14 @@
+# Compiled Binaries
+geofencing-server
+geofencing-server.exe
+*.exe
+
+# Local Databases
+geofencing.db
+geofencing.db-journal
+*.db
+*.db-journal
+
+# IDEs/Editors
+.vscode/
+.idea/
